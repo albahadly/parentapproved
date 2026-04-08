@@ -184,7 +184,7 @@ fun ConnectScreen(onBack: () -> Unit = {}) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "ParentApproved",
+                            text = "Albahadly kids",
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             fontFamily = NunitoSans,
