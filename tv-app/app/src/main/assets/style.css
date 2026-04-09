@@ -143,7 +143,25 @@ section {
 #playlist-form {
     display: flex;
     gap: 8px;
+    margin-bottom: 8px;
+}
+
+.playlist-actions {
+    display: flex;
+    gap: 8px;
     margin-bottom: 12px;
+}
+
+.btn-secondary {
+    background: #FFFFFF;
+    color: #4B5563;
+    border: 1px solid #E5E7EB;
+    font-size: 0.85em;
+    padding: 8px 12px;
+}
+
+.btn-secondary:hover {
+    background: #F9FAFB;
 }
 
 #playlist-form input {

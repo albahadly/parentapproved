@@ -24,7 +24,7 @@ class KioskManager(private val context: Context) {
     private val dpm: DevicePolicyManager =
         context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
 
-    private val adminComponent = ComponentName(context, ParentApprovedAdmin::class.java)
+    private val adminComponent = ComponentName(context, AlbahadlyKidsAdmin::class.java)
 
     private val activityManager: ActivityManager =
         context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager

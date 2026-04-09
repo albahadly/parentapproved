@@ -237,6 +237,58 @@
     });
 
     // --- Playlists ---
+    window.exportPlaylists = async function() {
+        try {
+            var result = await apiCall('GET', '/playlists');
+            if (result.status === 200) {
+                var data = JSON.stringify(result.data, null, 2);
+                var blob = new Blob([data], { type: 'application/json' });
+                var url = window.URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'content-sources.json';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }
+        } catch (err) {
+            console.error('Export failed:', err);
+        }
+    };
+
+    window.importPlaylists = async function(input) {
+        if (!input.files || !input.files[0]) return;
+        var file = input.files[0];
+        var reader = new FileReader();
+        reader.onload = async function(e) {
+            try {
+                var data = JSON.parse(e.target.result);
+                if (!Array.isArray(data)) {
+                    alert('Invalid format: Expected a JSON array of playlists.');
+                    return;
+                }
+
+                playlistError.classList.add('hidden');
+                var count = 0;
+                for (var pl of data) {
+                    var url = pl.sourceUrl || pl.originalUrl || pl.url;
+                    if (url) {
+                        var result = await apiCall('POST', '/playlists', { url: url });
+                        if (result.status === 201) count++;
+                    }
+                }
+                alert('Successfully imported ' + count + ' playlists.');
+                loadPlaylists();
+            } catch (err) {
+                alert('Import failed: ' + err.message);
+            } finally {
+                input.value = ''; // Reset file input
+            }
+        };
+        reader.readAsText(file);
+    };
+
     playlistForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         playlistError.classList.add('hidden');

@@ -5,10 +5,10 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 
-class ParentApprovedAdmin : DeviceAdminReceiver() {
+class AlbahadlyKidsAdmin : DeviceAdminReceiver() {
 
     companion object {
-        private const val TAG = "ParentApprovedAdmin"
+        private const val TAG = "AlbahadlyKidsAdmin"
     }
 
     override fun onEnabled(context: Context, intent: Intent) {

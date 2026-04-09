@@ -12,7 +12,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.schabi.newpipe.extractor.NewPipe
 
-class ParentApprovedApp : Application() {
+class AlbahadlyKidsApp : Application() {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
@@ -33,7 +33,7 @@ class ParentApprovedApp : Application() {
                 kotlinx.coroutines.delay(5_000) // Wait for app to fully initialize
                 val config = ServiceLocator.database.kioskDao().getConfig()
                 if (config?.kioskEnabled == true) {
-                    HomeWatcherService.start(this@ParentApprovedApp)
+                    HomeWatcherService.start(this@AlbahadlyKidsApp)
                     AppLogger.log("Home watcher service started")
                 }
             } catch (e: Exception) {

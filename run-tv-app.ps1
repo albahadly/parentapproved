@@ -6,7 +6,7 @@ $device = "192.168.68.145:5555"
 
 # Ensure the PC is connected to the TV
 Write-Host "Connecting to TV..."
-& $adb connect $device
+& adb connect $device
 
 # Rebuild and Install
 cd D:\Projects\parentapproved\tv-app
