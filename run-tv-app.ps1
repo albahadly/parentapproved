@@ -13,8 +13,8 @@ cd D:\Projects\parentapproved\tv-app
 .\gradlew.bat clean assembleDebug
 
 Write-Host "Installing APK..."
-& $adb -s $device install -r app\build\outputs\apk\debug\app-debug.apk
+& adb -s $device install -r app\build\outputs\apk\debug\app-debug.apk
 
 # Optional: Launch the app automatically after install
 # Replace 'com.example.myapp' with your actual package name
-& $adb -s $device shell monkey -p tv.parentapproved.app -c android.intent.category.LAUNCHER 1
+& adb -s $device shell monkey -p tv.parentapproved.app -c android.intent.category.LAUNCHER 1
