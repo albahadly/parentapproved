@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onKeyEvent
@@ -102,6 +103,16 @@ fun PlaybackScreen(
     var availableResolutions by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedResolution by remember { mutableStateOf<String?>(null) }
     var showResolutionPicker by remember { mutableStateOf(false) }
+    val resolutionFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(showResolutionPicker) {
+        if (showResolutionPicker) {
+            delay(100)
+            try {
+                resolutionFocusRequester.requestFocus()
+            } catch (_: Exception) {}
+        }
+    }
 
     val streamsRef = remember {
         object {
@@ -406,16 +417,25 @@ fun PlaybackScreen(
                         android.view.KeyEvent.KEYCODE_DPAD_UP,
                         android.view.KeyEvent.KEYCODE_MENU -> {
                             if (availableResolutions.isNotEmpty()) {
-                                showResolutionPicker = !showResolutionPicker
-                                if (showResolutionPicker) showControls = false
-                            }
-                            true
+                                if (showResolutionPicker) {
+                                    if (event.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU) {
+                                        showResolutionPicker = false
+                                        true
+                                    } else false // Allow UP to navigate in list
+                                } else {
+                                    showResolutionPicker = true
+                                    showControls = false
+                                    true
+                                }
+                            } else false
                         }
                         android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            if (!showResolutionPicker) {
+                            if (showResolutionPicker) {
+                                false // Allow DOWN to navigate in list
+                            } else {
                                 showControls = true
                                 true
-                            } else false
+                            }
                         }
                         android.view.KeyEvent.KEYCODE_BACK -> {
                             if (showResolutionPicker) {
@@ -527,13 +547,27 @@ fun PlaybackScreen(
                     )
                     
                     LazyColumn {
-                        items(availableResolutions) { res ->
+                        itemsIndexed(availableResolutions) { index, res ->
                             val isSelected = res == selectedResolution
+                            var isFocused by remember { mutableStateOf(false) }
+
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .onFocusChanged { isFocused = it.isFocused }
+                                    .then(
+                                        if (index == 0 || res == selectedResolution)
+                                            Modifier.focusRequester(resolutionFocusRequester)
+                                        else Modifier
+                                    )
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) KidAccent.copy(alpha = 0.2f) else Color.Transparent)
+                                    .background(
+                                        when {
+                                            isFocused -> KidAccent
+                                            isSelected -> KidAccent.copy(alpha = 0.2f)
+                                            else -> Color.Transparent
+                                        }
+                                    )
                                     .clickable {
                                         if (!isSelected) {
                                             val currentPos = exoPlayer.currentPosition
@@ -571,14 +605,18 @@ fun PlaybackScreen(
                                 Text(
                                     text = res,
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = if (isSelected) KidAccent else KidText,
+                                    color = when {
+                                        isFocused -> Color.White
+                                        isSelected -> KidAccent
+                                        else -> KidText
+                                    },
                                     modifier = Modifier.weight(1f)
                                 )
                                 if (isSelected) {
                                     Icon(
                                         imageVector = Icons.Default.Check,
                                         contentDescription = null,
-                                        tint = KidAccent,
+                                        tint = if (isFocused) Color.White else KidAccent,
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
