@@ -1,6 +1,8 @@
 package tv.parentapproved.app.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
@@ -16,10 +18,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -28,6 +34,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,6 +46,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
@@ -55,6 +63,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
+import coil.compose.AsyncImage
 import tv.parentapproved.app.ServiceLocator
 import tv.parentapproved.app.data.ContentSourceRepository
 import tv.parentapproved.app.timelimits.TimeLimitStatus
@@ -99,6 +108,12 @@ fun PlaybackScreen(
     var playStartTime by remember { mutableStateOf(0L) }
     var playlistTitle by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
+
+    var preferredResolution by remember { mutableStateOf<String?>(null) }
+    var currentPosition by remember { mutableLongStateOf(0L) }
+    var totalDuration by remember { mutableLongStateOf(0L) }
+    var seekMessage by remember { mutableStateOf<String?>(null) }
+    var controlsTrigger by remember { mutableIntStateOf(0) }
 
     var availableResolutions by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedResolution by remember { mutableStateOf<String?>(null) }
@@ -227,7 +242,15 @@ fun PlaybackScreen(
                         streamsRef.videoOnly
                     )
 
-                    StreamSelector.selectBest(
+                    // Try preferred resolution first, otherwise default best
+                    preferredResolution?.let { pref ->
+                        StreamSelector.selectByResolution(
+                            pref,
+                            streamsRef.progressive,
+                            streamsRef.videoOnly,
+                            streamsRef.audio
+                        )
+                    } ?: StreamSelector.selectBest(
                         streamsRef.progressive,
                         streamsRef.videoOnly,
                         streamsRef.audio
@@ -236,7 +259,6 @@ fun PlaybackScreen(
 
                 if (streamResult == null) {
                     errorMessage = "Can't play this video"
-                    controller.skipAfterDelay?.invoke()
                     return@launch
                 }
 
@@ -259,7 +281,6 @@ fun PlaybackScreen(
             } catch (e: Exception) {
                 AppLogger.error("Extraction failed: ${e.message}")
                 errorMessage = "Can't play this video"
-                controller.skipAfterDelay?.invoke()
             }
         }
     }
@@ -303,6 +324,16 @@ fun PlaybackScreen(
                         PlayEventRecorder.onResume()
                     }
                 }
+                PlaybackCommand.SeekForward -> {
+                    exoPlayer.seekTo(exoPlayer.currentPosition + 10_000)
+                    seekMessage = "+10s"
+                    controlsTrigger++
+                }
+                PlaybackCommand.SeekBack -> {
+                    exoPlayer.seekTo(exoPlayer.currentPosition - 10_000)
+                    seekMessage = "-10s"
+                    controlsTrigger++
+                }
             }
         }
     }
@@ -339,13 +370,17 @@ fun PlaybackScreen(
     // Periodic event update
     LaunchedEffect(exoPlayer) {
         while (true) {
-            delay(10_000)
+            delay(1000)
             if (exoPlayer.isPlaying) {
+                currentPosition = exoPlayer.currentPosition
+                totalDuration = exoPlayer.duration
+                
                 val elapsed = ((System.currentTimeMillis() - playStartTime) / 1000).toInt()
-                val position = exoPlayer.currentPosition
-                val duration = exoPlayer.duration
-                val pct = if (duration > 0) ((position * 100) / duration).toInt() else 0
-                PlayEventRecorder.updateEvent(elapsed, pct)
+                val pct = if (totalDuration > 0) ((currentPosition * 100) / totalDuration).toInt() else 0
+                
+                if (elapsed % 10 == 0) { // Still update backend every 10s
+                    PlayEventRecorder.updateEvent(elapsed, pct)
+                }
             }
         }
     }
@@ -399,10 +434,18 @@ fun PlaybackScreen(
 
     // Auto-hide UI controls after delay
     var showControls by remember { mutableStateOf(false) }
-    LaunchedEffect(showControls) {
-        if (showControls) {
+    LaunchedEffect(showControls, controlsTrigger, showResolutionPicker) {
+        if (showControls && !showResolutionPicker) {
             delay(5000)
             showControls = false
+        }
+    }
+
+    // Hide seek message after delay
+    LaunchedEffect(seekMessage, controlsTrigger) {
+        if (seekMessage != null) {
+            delay(1500)
+            seekMessage = null
         }
     }
 
@@ -413,6 +456,7 @@ fun PlaybackScreen(
             .focusRequester(focusRequester)
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
+                    controlsTrigger++
                     when (event.nativeKeyEvent.keyCode) {
                         android.view.KeyEvent.KEYCODE_DPAD_UP,
                         android.view.KeyEvent.KEYCODE_MENU -> {
@@ -579,6 +623,7 @@ fun PlaybackScreen(
                                             )
                                             if (streamResult != null) {
                                                 selectedResolution = res
+                                                preferredResolution = res
                                                 val factory = DefaultHttpDataSource.Factory().setUserAgent(USER_AGENT)
                                                 if (streamResult.audioUrl != null) {
                                                     val videoSource = ProgressiveMediaSource.Factory(factory)
@@ -631,21 +676,100 @@ fun PlaybackScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(KidBackground.copy(alpha = 0.85f)),
+                    .background(KidBackground.copy(alpha = 0.9f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = null,
+                        tint = StatusError,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = errorMessage!!,
                         style = MaterialTheme.typography.headlineMedium,
-                        color = StatusError,
+                        color = KidText,
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Button(
+                        onClick = { controller.extractAndPlay?.invoke(videoId) },
+                        colors = ButtonDefaults.buttonColors(containerColor = KidAccent),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.height(56.dp).width(200.dp)
+                    ) {
+                        Text("Retry", style = MaterialTheme.typography.titleMedium)
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Skipping in 3 seconds...",
+                        text = "Or press Back to exit",
                         style = MaterialTheme.typography.bodyMedium,
                         color = KidTextDim,
                     )
+                }
+            }
+        }
+
+        // Seek Visual Bubble
+        if (seekMessage != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                    .padding(horizontal = 24.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = seekMessage!!,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Color.White
+                )
+            }
+        }
+
+        // 'Up Next' Preview
+        val nextVideo = playlist.getOrNull(currentVideoIndex + 1)
+        val timeToEnd = totalDuration - currentPosition
+        if (nextVideo != null && timeToEnd in 1..15000 && !showResolutionPicker && !showControls) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 32.dp, end = 32.dp),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                Row(
+                    modifier = Modifier
+                        .width(320.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(KidSurface.copy(alpha = 0.9f))
+                        .border(BorderStroke(2.dp, KidAccent), RoundedCornerShape(16.dp))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AsyncImage(
+                        model = nextVideo.thumbnailUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(80.dp, 45.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "UP NEXT",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = KidAccent
+                        )
+                        Text(
+                            text = nextVideo.title,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = KidText,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }

@@ -8,6 +8,8 @@ sealed class PlaybackCommand {
     object SkipNext : PlaybackCommand()
     object SkipPrev : PlaybackCommand()
     object TogglePause : PlaybackCommand()
+    object SeekForward : PlaybackCommand()
+    object SeekBack : PlaybackCommand()
 }
 
 object PlaybackCommandBus {
