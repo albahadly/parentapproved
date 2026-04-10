@@ -13,23 +13,56 @@ data class SelectedStream(
 
 object StreamSelector {
 
+    fun getAvailableResolutions(
+        progressiveStreams: List<VideoStream>,
+        videoOnlyStreams: List<VideoStream>,
+    ): List<String> {
+        val res = (progressiveStreams + videoOnlyStreams)
+            .mapNotNull { it.resolution }
+            .distinct()
+            .sortedByDescending { resolutionToInt(it) }
+        return res
+    }
+
+    fun selectByResolution(
+        targetResolution: String,
+        progressiveStreams: List<VideoStream>,
+        videoOnlyStreams: List<VideoStream>,
+        audioStreams: List<AudioStream>,
+    ): SelectedStream? {
+        // 1. Try progressive matching resolution
+        progressiveStreams.find { it.resolution == targetResolution }?.let {
+            return SelectedStream(it.content, null, it.resolution, false)
+        }
+
+        // 2. Try video-only matching resolution
+        val videoOnly = videoOnlyStreams.find { it.resolution == targetResolution }
+        val bestAudio = audioStreams.maxByOrNull { it.averageBitrate }
+
+        if (videoOnly != null && bestAudio != null) {
+            return SelectedStream(videoOnly.content, bestAudio.content, videoOnly.resolution, true)
+        }
+
+        return null
+    }
+
     /**
-     * Priority: 1080p progressive > 720p progressive > any progressive > adaptive merge
+     * Priority: 1080p > 720p > any progressive > adaptive merge
      */
     fun selectBest(
         progressiveStreams: List<VideoStream>,
         videoOnlyStreams: List<VideoStream>,
         audioStreams: List<AudioStream>,
     ): SelectedStream? {
+        // Try to get 1080p specifically first (either progressive or merge)
+        selectByResolution("1080p", progressiveStreams, videoOnlyStreams, audioStreams)?.let {
+            AppLogger.log("Selected: 1080p (Preferred)")
+            return it
+        }
+
         // Try progressive first (has audio built in)
         val progressive = progressiveStreams
             .sortedByDescending { resolutionToInt(it.resolution) }
-
-        // Try 1080p progressive
-        progressive.find { resolutionToInt(it.resolution) == 1080 }?.let { stream ->
-            AppLogger.log("Selected: 1080p progressive")
-            return SelectedStream(stream.content, null, stream.resolution ?: "1080p", false)
-        }
 
         // Try 720p progressive
         progressive.find { resolutionToInt(it.resolution) == 720 }?.let { stream ->

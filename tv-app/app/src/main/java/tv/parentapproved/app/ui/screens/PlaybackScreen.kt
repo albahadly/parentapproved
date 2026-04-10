@@ -1,14 +1,26 @@
 package tv.parentapproved.app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,8 +34,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
@@ -50,6 +64,8 @@ import tv.parentapproved.app.playback.PlaybackCommand
 import tv.parentapproved.app.playback.PlaybackCommandBus
 import tv.parentapproved.app.playback.StreamSelector
 import tv.parentapproved.app.ui.theme.KidBackground
+import tv.parentapproved.app.ui.theme.KidSurface
+import tv.parentapproved.app.ui.theme.KidAccent
 import tv.parentapproved.app.ui.theme.KidText
 import tv.parentapproved.app.ui.theme.KidTextDim
 import tv.parentapproved.app.ui.theme.StatusError
@@ -82,6 +98,18 @@ fun PlaybackScreen(
     var playStartTime by remember { mutableStateOf(0L) }
     var playlistTitle by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
+
+    var availableResolutions by remember { mutableStateOf<List<String>>(emptyList()) }
+    var selectedResolution by remember { mutableStateOf<String?>(null) }
+    var showResolutionPicker by remember { mutableStateOf(false) }
+
+    val streamsRef = remember {
+        object {
+            var progressive: List<org.schabi.newpipe.extractor.stream.VideoStream> = emptyList()
+            var videoOnly: List<org.schabi.newpipe.extractor.stream.VideoStream> = emptyList()
+            var audio: List<org.schabi.newpipe.extractor.stream.AudioStream> = emptyList()
+        }
+    }
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
@@ -151,6 +179,8 @@ fun PlaybackScreen(
         errorMessage = null
         AppLogger.log("Extracting stream: $vid")
         playStartTime = System.currentTimeMillis()
+        availableResolutions = emptyList()
+        selectedResolution = null
 
         val currentVideo = playlistRef.value.getOrNull(indexRef.intValue)
         val title = currentVideo?.title ?: vid
@@ -166,7 +196,7 @@ fun PlaybackScreen(
 
         scope.launch {
             try {
-                val stream = withContext(Dispatchers.IO) {
+                val streamResult = withContext(Dispatchers.IO) {
                     val url = "https://www.youtube.com/watch?v=$vid"
                     val extractor = ServiceList.YouTube.getStreamExtractor(url)
                     extractor.fetchPage()
@@ -177,33 +207,43 @@ fun PlaybackScreen(
                         PlayEventRecorder.updateTitle(extractedTitle)
                     }
 
-                    val progressive = (extractor.videoStreams ?: emptyList()).filter { !it.isVideoOnly }
-                    val videoOnly = extractor.videoOnlyStreams ?: emptyList()
-                    val audio = extractor.audioStreams ?: emptyList()
+                    streamsRef.progressive = (extractor.videoStreams ?: emptyList()).filter { !it.isVideoOnly }
+                    streamsRef.videoOnly = extractor.videoOnlyStreams ?: emptyList()
+                    streamsRef.audio = extractor.audioStreams ?: emptyList()
 
-                    StreamSelector.selectBest(progressive, videoOnly, audio)
+                    availableResolutions = StreamSelector.getAvailableResolutions(
+                        streamsRef.progressive,
+                        streamsRef.videoOnly
+                    )
+
+                    StreamSelector.selectBest(
+                        streamsRef.progressive,
+                        streamsRef.videoOnly,
+                        streamsRef.audio
+                    )
                 }
 
-                if (stream == null) {
+                if (streamResult == null) {
                     errorMessage = "Can't play this video"
                     controller.skipAfterDelay?.invoke()
                     return@launch
                 }
 
+                selectedResolution = streamResult.resolution
                 val factory = DefaultHttpDataSource.Factory().setUserAgent(USER_AGENT)
-                if (stream.audioUrl != null) {
+                if (streamResult.audioUrl != null) {
                     val videoSource = ProgressiveMediaSource.Factory(factory)
-                        .createMediaSource(MediaItem.fromUri(stream.videoUrl))
+                        .createMediaSource(MediaItem.fromUri(streamResult.videoUrl))
                     val audioSource = ProgressiveMediaSource.Factory(factory)
-                        .createMediaSource(MediaItem.fromUri(stream.audioUrl))
+                        .createMediaSource(MediaItem.fromUri(streamResult.audioUrl))
                     exoPlayer.setMediaSource(MergingMediaSource(videoSource, audioSource))
                 } else {
                     val source = ProgressiveMediaSource.Factory(factory)
-                        .createMediaSource(MediaItem.fromUri(stream.videoUrl))
+                        .createMediaSource(MediaItem.fromUri(streamResult.videoUrl))
                     exoPlayer.setMediaSource(source)
                 }
                 exoPlayer.prepare()
-                AppLogger.success("Playing $vid at ${stream.resolution}")
+                AppLogger.success("Playing $vid at ${streamResult.resolution}")
 
             } catch (e: Exception) {
                 AppLogger.error("Extraction failed: ${e.message}")
@@ -346,6 +386,15 @@ fun PlaybackScreen(
         focusRequester.requestFocus()
     }
 
+    // Auto-hide UI controls after delay
+    var showControls by remember { mutableStateOf(false) }
+    LaunchedEffect(showControls) {
+        if (showControls) {
+            delay(5000)
+            showControls = false
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -353,11 +402,39 @@ fun PlaybackScreen(
             .focusRequester(focusRequester)
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
-                    val command = DpadKeyHandler.mapKeyToCommand(event.nativeKeyEvent.keyCode)
-                    if (command != null) {
-                        PlaybackCommandBus.send(command)
-                        true
-                    } else false
+                    when (event.nativeKeyEvent.keyCode) {
+                        android.view.KeyEvent.KEYCODE_DPAD_UP,
+                        android.view.KeyEvent.KEYCODE_MENU -> {
+                            if (availableResolutions.isNotEmpty()) {
+                                showResolutionPicker = !showResolutionPicker
+                                if (showResolutionPicker) showControls = false
+                            }
+                            true
+                        }
+                        android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            if (!showResolutionPicker) {
+                                showControls = true
+                                true
+                            } else false
+                        }
+                        android.view.KeyEvent.KEYCODE_BACK -> {
+                            if (showResolutionPicker) {
+                                showResolutionPicker = false
+                                true
+                            } else {
+                                onBack()
+                                true
+                            }
+                        }
+                        else -> {
+                            val command = DpadKeyHandler.mapKeyToCommand(event.nativeKeyEvent.keyCode)
+                            if (command != null) {
+                                PlaybackCommandBus.send(command)
+                                showControls = true
+                                true
+                            } else false
+                        }
+                    }
                 } else false
             }
             .focusable()
@@ -393,6 +470,124 @@ fun PlaybackScreen(
             },
             modifier = Modifier.fillMaxSize(),
         )
+
+        // Quality Icon Overlay (shown below progress bar on the right when controls are visible)
+        if (showControls && availableResolutions.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 60.dp, end = 40.dp), // Positioned roughly near the end of progress bar
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(KidSurface.copy(alpha = 0.8f))
+                        .clickable { showResolutionPicker = true }
+                        .padding(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Quality",
+                        tint = KidAccent,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Text(
+                        text = selectedResolution ?: "Auto",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = KidText
+                    )
+                }
+            }
+        }
+
+        // Resolution Picker Overlay
+        if (showResolutionPicker) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .clickable { showResolutionPicker = false },
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(280.dp)
+                        .background(KidSurface)
+                        .padding(24.dp)
+                        .clickable(enabled = false) {}
+                ) {
+                    Text(
+                        text = "Quality",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = KidText,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    
+                    LazyColumn {
+                        items(availableResolutions) { res ->
+                            val isSelected = res == selectedResolution
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) KidAccent.copy(alpha = 0.2f) else Color.Transparent)
+                                    .clickable {
+                                        if (!isSelected) {
+                                            val currentPos = exoPlayer.currentPosition
+                                            val streamResult = StreamSelector.selectByResolution(
+                                                res,
+                                                streamsRef.progressive,
+                                                streamsRef.videoOnly,
+                                                streamsRef.audio
+                                            )
+                                            if (streamResult != null) {
+                                                selectedResolution = res
+                                                val factory = DefaultHttpDataSource.Factory().setUserAgent(USER_AGENT)
+                                                if (streamResult.audioUrl != null) {
+                                                    val videoSource = ProgressiveMediaSource.Factory(factory)
+                                                        .createMediaSource(MediaItem.fromUri(streamResult.videoUrl))
+                                                    val audioSource = ProgressiveMediaSource.Factory(factory)
+                                                        .createMediaSource(MediaItem.fromUri(streamResult.audioUrl))
+                                                    exoPlayer.setMediaSource(MergingMediaSource(videoSource, audioSource))
+                                                } else {
+                                                    val source = ProgressiveMediaSource.Factory(factory)
+                                                        .createMediaSource(MediaItem.fromUri(streamResult.videoUrl))
+                                                    exoPlayer.setMediaSource(source)
+                                                }
+                                                exoPlayer.prepare()
+                                                exoPlayer.seekTo(currentPos)
+                                                exoPlayer.play()
+                                                AppLogger.log("Switched to $res")
+                                            }
+                                        }
+                                        showResolutionPicker = false
+                                    }
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = res,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = if (isSelected) KidAccent else KidText,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = KidAccent,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         if (errorMessage != null) {
             Box(
