@@ -12,6 +12,7 @@ const ALLOWED_ROUTES: AllowlistEntry[] = [
   { pattern: /^\/api\/auth$/, methods: ["POST"] },
   { pattern: /^\/api\/auth\/refresh$/, methods: ["POST"] },
   { pattern: /^\/api\/playlists$/, methods: ["GET", "POST"] },
+  { pattern: /^\/api\/playlists\/reorder$/, methods: ["PUT"] },
   { pattern: /^\/api\/playlists\/[^/]+$/, methods: ["GET", "DELETE"] },
   { pattern: /^\/api\/playback\/[^/]+$/, methods: ["POST"] },
   { pattern: /^\/api\/playback$/, methods: ["GET"] },

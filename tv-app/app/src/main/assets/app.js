@@ -321,21 +321,110 @@
             var result = await apiCall('GET', '/playlists');
             if (result.status === 200) {
                 playlistList.innerHTML = '';
-                result.data.forEach(function(pl) {
+                var playlists = result.data;
+                playlists.forEach(function(pl, index) {
                     var li = document.createElement('li');
+                    li.setAttribute('draggable', 'true');
+                    li.setAttribute('data-id', pl.id);
+                    li.className = 'playlist-item';
+
+                    // Drag handle
+                    var handle = document.createElement('span');
+                    handle.className = 'drag-handle';
+                    handle.textContent = '\u2630';
+                    handle.title = 'Drag to reorder';
+                    li.appendChild(handle);
+
+                    // Label
                     var label = escapeHtml(pl.displayName);
                     if (pl.videoCount > 0) label += ' \u2014 ' + pl.videoCount + ' videos';
-                    li.innerHTML = '<span>' + label + '</span>';
+                    var labelSpan = document.createElement('span');
+                    labelSpan.className = 'playlist-label';
+                    labelSpan.innerHTML = label;
+                    li.appendChild(labelSpan);
+
+                    // Reorder buttons
+                    var reorderBtns = document.createElement('span');
+                    reorderBtns.className = 'reorder-buttons';
+
+                    var upBtn = document.createElement('button');
+                    upBtn.className = 'reorder-btn';
+                    upBtn.textContent = '\u25B2';
+                    upBtn.title = 'Move up';
+                    upBtn.disabled = index === 0;
+                    upBtn.onclick = function() { movePlaylist(index, index - 1, playlists); };
+
+                    var downBtn = document.createElement('button');
+                    downBtn.className = 'reorder-btn';
+                    downBtn.textContent = '\u25BC';
+                    downBtn.title = 'Move down';
+                    downBtn.disabled = index === playlists.length - 1;
+                    downBtn.onclick = function() { movePlaylist(index, index + 1, playlists); };
+
+                    reorderBtns.appendChild(upBtn);
+                    reorderBtns.appendChild(downBtn);
+                    li.appendChild(reorderBtns);
+
+                    // Delete button
                     var btn = document.createElement('button');
                     btn.className = 'delete-btn';
                     btn.textContent = 'Remove';
                     btn.onclick = function() { deletePlaylist(pl.id); };
                     li.appendChild(btn);
+
+                    // Drag-and-drop events
+                    li.addEventListener('dragstart', function(e) {
+                        e.dataTransfer.setData('text/plain', pl.id);
+                        li.classList.add('dragging');
+                    });
+                    li.addEventListener('dragend', function() {
+                        li.classList.remove('dragging');
+                    });
+                    li.addEventListener('dragover', function(e) {
+                        e.preventDefault();
+                        li.classList.add('drag-over');
+                    });
+                    li.addEventListener('dragleave', function() {
+                        li.classList.remove('drag-over');
+                    });
+                    li.addEventListener('drop', function(e) {
+                        e.preventDefault();
+                        li.classList.remove('drag-over');
+                        var draggedId = e.dataTransfer.getData('text/plain');
+                        if (draggedId == pl.id) return;
+                        // Build new order by moving dragged item to this position
+                        var ids = playlists.map(function(p) { return p.id; });
+                        var fromIdx = ids.indexOf(parseInt(draggedId));
+                        var toIdx = ids.indexOf(pl.id);
+                        if (fromIdx < 0 || toIdx < 0) return;
+                        ids.splice(fromIdx, 1);
+                        ids.splice(toIdx, 0, parseInt(draggedId));
+                        reorderPlaylists(ids);
+                    });
+
                     playlistList.appendChild(li);
                 });
             }
         } catch (err) {
             console.error('Load playlists failed:', err);
+        }
+    }
+
+    function movePlaylist(fromIndex, toIndex, playlists) {
+        var ids = playlists.map(function(p) { return p.id; });
+        var item = ids.splice(fromIndex, 1)[0];
+        ids.splice(toIndex, 0, item);
+        reorderPlaylists(ids);
+    }
+
+    async function reorderPlaylists(orderedIds) {
+        try {
+            var result = await apiCall('PUT', '/playlists/reorder', { order: orderedIds });
+            if (result.status === 200) {
+                loadPlaylists();
+            }
+        } catch (err) {
+            console.error('Reorder failed:', err);
         }
     }
 

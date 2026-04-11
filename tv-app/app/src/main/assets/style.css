@@ -206,6 +206,85 @@ section {
     color: #FFFFFF;
     padding: 6px 12px;
     font-size: 0.8em;
+    flex-shrink: 0;
+}
+
+/* Playlist item with reorder */
+.playlist-item {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    gap: 8px;
+    cursor: grab;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.playlist-item:active {
+    cursor: grabbing;
+}
+
+.playlist-item.dragging {
+    opacity: 0.5;
+    background: #F3F4F6;
+}
+
+.playlist-item.drag-over {
+    border-color: #22A559;
+    background: #F0FDF4;
+    box-shadow: 0 0 0 2px rgba(34, 165, 89, 0.2);
+}
+
+.drag-handle {
+    color: #9CA3AF;
+    font-size: 1.1em;
+    cursor: grab;
+    user-select: none;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.playlist-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.reorder-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.reorder-btn {
+    background: #F3F4F6;
+    color: #4B5563;
+    border: 1px solid #E5E7EB;
+    padding: 2px 8px;
+    font-size: 0.65em;
+    border-radius: 4px;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.reorder-btn:hover:not(:disabled) {
+    background: #E5E7EB;
+    color: #1A1A1A;
+}
+
+.reorder-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
 }
 
 /* Stats */

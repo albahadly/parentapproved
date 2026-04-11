@@ -27,6 +27,10 @@ describe("allowlist", () => {
       expect(isAllowed("/api/playlists/abc123", "DELETE")).toEqual({ allowed: true });
     });
 
+    it("allows PUT /api/playlists/reorder", () => {
+      expect(isAllowed("/api/playlists/reorder", "PUT")).toEqual({ allowed: true });
+    });
+
     it("allows POST /api/playback/:command", () => {
       expect(isAllowed("/api/playback/pause", "POST")).toEqual({ allowed: true });
       expect(isAllowed("/api/playback/stop", "POST")).toEqual({ allowed: true });

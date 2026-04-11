@@ -11,7 +11,7 @@ import tv.parentapproved.app.data.events.PlayEventEntity
 
 @Database(
     entities = [VideoEntity::class, PlayEventEntity::class, ChannelEntity::class, TimeLimitConfigEntity::class, KioskConfigEntity::class, WhitelistEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class CacheDatabase : RoomDatabase() {
@@ -150,6 +150,18 @@ abstract class CacheDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE channels ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
+                // Backfill sort_order based on added_at so existing sources keep their chronological order
+                db.execSQL("""
+                    UPDATE channels SET sort_order = (
+                        SELECT COUNT(*) FROM channels AS c2 WHERE c2.added_at < channels.added_at
+                    )
+                """.trimIndent())
+            }
+        }
+
         fun getInstance(context: Context): CacheDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -157,7 +169,7 @@ abstract class CacheDatabase : RoomDatabase() {
                     CacheDatabase::class.java,
                     "parentapproved_cache"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                 INSTANCE = instance
                 instance

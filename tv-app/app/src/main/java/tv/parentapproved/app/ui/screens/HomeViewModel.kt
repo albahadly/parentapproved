@@ -74,7 +74,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
                 // Check content changes: channel list signature (ids + video counts)
                 val channels = db.channelDao().getAll()
-                val sig = channels.joinToString(",") { "${it.id}:${it.videoCount}" }
+                val sig = channels.joinToString(",") { "${it.id}:${it.videoCount}:${it.sortOrder}" }
                 if (sig != lastChannelSignature) {
                     lastChannelSignature = sig
                     loadAndResolve()

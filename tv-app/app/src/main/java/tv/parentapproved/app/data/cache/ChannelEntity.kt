@@ -18,4 +18,5 @@ data class ChannelEntity(
     @ColumnInfo(name = "video_count") val videoCount: Int = 0,
     @ColumnInfo(name = "added_at") val addedAt: Long = System.currentTimeMillis(),
     val status: String = "active",
+    @ColumnInfo(name = "sort_order") val sortOrder: Int = 0,
 )

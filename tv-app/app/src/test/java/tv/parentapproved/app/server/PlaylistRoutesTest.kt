@@ -212,4 +212,94 @@ class PlaylistRoutesTest {
         assertEquals("vid1", item["sourceId"]?.jsonPrimitive?.content)
         assertEquals("1", item["videoCount"]?.jsonPrimitive?.content)
     }
+
+    @Test
+    fun putReorder_validOrder_returns200WithReorderedList() = testApp(
+        setupDao = {
+            kotlinx.coroutines.runBlocking {
+                insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PLA", sourceUrl = "urlA", displayName = "A", sortOrder = 0))
+                insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PLB", sourceUrl = "urlB", displayName = "B", sortOrder = 1))
+                insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PLC", sourceUrl = "urlC", displayName = "C", sortOrder = 2))
+            }
+        }
+    ) { token ->
+        // Get IDs
+        val listResp = client.get("/playlists") { header("Authorization", "Bearer $token") }
+        val items = Json.parseToJsonElement(listResp.bodyAsText()).jsonArray
+        val idA = items[0].jsonObject["id"]!!.jsonPrimitive.long
+        val idB = items[1].jsonObject["id"]!!.jsonPrimitive.long
+        val idC = items[2].jsonObject["id"]!!.jsonPrimitive.long
+
+        // Reorder: C, A, B
+        val response = client.put("/playlists/reorder") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody("""{"order":[$idC,$idA,$idB]}""")
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+
+        val reordered = Json.parseToJsonElement(response.bodyAsText()).jsonArray
+        assertEquals("PLC", reordered[0].jsonObject["sourceId"]?.jsonPrimitive?.content)
+        assertEquals("PLA", reordered[1].jsonObject["sourceId"]?.jsonPrimitive?.content)
+        assertEquals("PLB", reordered[2].jsonObject["sourceId"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun putReorder_invalidIds_returns400() = testApp(
+        setupDao = {
+            kotlinx.coroutines.runBlocking {
+                insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PLA", sourceUrl = "urlA", displayName = "A"))
+            }
+        }
+    ) { token ->
+        val response = client.put("/playlists/reorder") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody("""{"order":[999]}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun putReorder_emptyOrder_returns400() = testApp { token ->
+        val response = client.put("/playlists/reorder") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody("""{"order":[]}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun postPlaylist_newPlaylistGetsSortOrderAtEnd() = testApp(
+        setupDao = {
+            kotlinx.coroutines.runBlocking {
+                insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PLfirst", sourceUrl = "url1", displayName = "First", sortOrder = 0))
+                insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PLsecond", sourceUrl = "url2", displayName = "Second", sortOrder = 1))
+            }
+        }
+    ) { token ->
+        val response = client.post("/playlists") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody("""{"url":"https://www.youtube.com/watch?v=newVid123"}""")
+        }
+        assertEquals(HttpStatusCode.Created, response.status)
+        val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+        assertEquals("2", body["sortOrder"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun getPlaylists_returnsSortOrderField() = testApp(
+        setupDao = {
+            kotlinx.coroutines.runBlocking {
+                insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PL1", sourceUrl = "url1", displayName = "Test", sortOrder = 5))
+            }
+        }
+    ) { token ->
+        val response = client.get("/playlists") { header("Authorization", "Bearer $token") }
+        val items = Json.parseToJsonElement(response.bodyAsText()).jsonArray
+        assertEquals("5", items[0].jsonObject["sortOrder"]?.jsonPrimitive?.content)
+    }
 }
+

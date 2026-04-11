@@ -16,6 +16,9 @@ import kotlinx.serialization.Serializable
 data class AddPlaylistRequest(val url: String? = null)
 
 @Serializable
+data class ReorderRequest(val order: List<Long>? = null)
+
+@Serializable
 data class PlaylistResponse(
     val id: Long,
     val sourceType: String,
@@ -25,6 +28,7 @@ data class PlaylistResponse(
     val videoCount: Int,
     val addedAt: Long,
     val status: String,
+    val sortOrder: Int,
 )
 
 private const val MAX_SOURCES = 20
@@ -81,10 +85,46 @@ fun Route.playlistRoutes(sessionManager: SessionManager, database: CacheDatabase
             sourceId = source.id,
             sourceUrl = source.canonicalUrl,
             displayName = source.id, // Will be updated on first resolve
+            sortOrder = dao.getMaxSortOrder() + 1,
         )
         val id = dao.insert(entity)
         val saved = entity.copy(id = id)
         call.respond(HttpStatusCode.Created, saved.toResponse())
+    }
+
+    put("/playlists/reorder") {
+        if (!validateSession(sessionManager)) return@put
+
+        val body = try {
+            call.receive<ReorderRequest>()
+        } catch (e: Exception) {
+            call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid request body"))
+            return@put
+        }
+
+        val order = body.order
+        if (order.isNullOrEmpty()) {
+            call.respond(HttpStatusCode.BadRequest, mapOf("error" to "order array is required"))
+            return@put
+        }
+
+        val dao = database.channelDao()
+        val existing = dao.getAll().map { it.id }.toSet()
+
+        // Validate all IDs exist
+        val unknown = order.filter { it !in existing }
+        if (unknown.isNotEmpty()) {
+            call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Unknown playlist IDs: $unknown"))
+            return@put
+        }
+
+        // Update sort_order for each ID in the provided order
+        order.forEachIndexed { index, id ->
+            dao.updateSortOrder(id, index)
+        }
+
+        val channels = dao.getAll()
+        call.respond(channels.map { it.toResponse() })
     }
 
     delete("/playlists/{id}") {
@@ -118,4 +158,5 @@ private fun ChannelEntity.toResponse() = PlaylistResponse(
     videoCount = videoCount,
     addedAt = addedAt,
     status = status,
+    sortOrder = sortOrder,
 )

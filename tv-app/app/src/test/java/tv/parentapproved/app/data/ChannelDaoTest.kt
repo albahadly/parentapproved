@@ -96,6 +96,43 @@ class ChannelDaoTest {
         dao.deleteAll()
         assertEquals(0, dao.count())
     }
+
+    @Test
+    fun updateSortOrder_changesOrder() = runTest {
+        val id1 = dao.insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PLA", sourceUrl = "url1", displayName = "A", sortOrder = 0))
+        val id2 = dao.insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PLB", sourceUrl = "url2", displayName = "B", sortOrder = 1))
+        val id3 = dao.insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PLC", sourceUrl = "url3", displayName = "C", sortOrder = 2))
+
+        // Reorder: C first, then A, then B
+        dao.updateSortOrder(id3, 0)
+        dao.updateSortOrder(id1, 1)
+        dao.updateSortOrder(id2, 2)
+
+        val all = dao.getAll()
+        assertEquals("PLC", all[0].sourceId)
+        assertEquals("PLA", all[1].sourceId)
+        assertEquals("PLB", all[2].sourceId)
+    }
+
+    @Test
+    fun getAll_returnsSortedBySortOrder() = runTest {
+        dao.insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PLA", sourceUrl = "url1", displayName = "A", sortOrder = 2))
+        dao.insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PLB", sourceUrl = "url2", displayName = "B", sortOrder = 0))
+        dao.insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PLC", sourceUrl = "url3", displayName = "C", sortOrder = 1))
+
+        val all = dao.getAll()
+        assertEquals("PLB", all[0].sourceId)
+        assertEquals("PLC", all[1].sourceId)
+        assertEquals("PLA", all[2].sourceId)
+    }
+
+    @Test
+    fun getMaxSortOrder_returnsHighestValue() = runTest {
+        assertEquals(-1, dao.getMaxSortOrder())
+        dao.insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PLA", sourceUrl = "url1", displayName = "A", sortOrder = 5))
+        dao.insert(ChannelEntity(sourceType = "yt_playlist", sourceId = "PLB", sourceUrl = "url2", displayName = "B", sortOrder = 3))
+        assertEquals(5, dao.getMaxSortOrder())
+    }
 }
 
 /**
@@ -114,7 +151,7 @@ class FakeChannelDao : ChannelDao {
         return entity.id
     }
 
-    override suspend fun getAll(): List<ChannelEntity> = store.sortedBy { it.addedAt }
+    override suspend fun getAll(): List<ChannelEntity> = store.sortedWith(compareBy({ it.sortOrder }, { it.addedAt }))
 
     override suspend fun getBySourceId(sourceId: String): ChannelEntity? =
         store.find { it.sourceId == sourceId }
@@ -143,4 +180,14 @@ class FakeChannelDao : ChannelDao {
         val idx = store.indexOfFirst { it.id == id }
         if (idx >= 0) store[idx] = store[idx].copy(displayName = name, videoCount = count)
     }
+
+    override suspend fun updateSortOrder(id: Long, sortOrder: Int) {
+        val idx = store.indexOfFirst { it.id == id }
+        if (idx >= 0) store[idx] = store[idx].copy(sortOrder = sortOrder)
+    }
+
+    override suspend fun getMaxSortOrder(): Int {
+        return store.maxOfOrNull { it.sortOrder } ?: -1
+    }
 }
+

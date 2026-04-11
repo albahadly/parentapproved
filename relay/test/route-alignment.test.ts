@@ -22,6 +22,7 @@ const KTOR_ROUTES: [string, string, string][] = [
   // PlaylistRoutes.kt
   ["GET", "/api/playlists", "List playlists"],
   ["POST", "/api/playlists", "Add playlist"],
+  ["PUT", "/api/playlists/reorder", "Reorder playlists"],
   ["DELETE", "/api/playlists/abc123", "Delete playlist (parameterized)"],
 
   // PlaybackRoutes.kt
@@ -60,6 +61,7 @@ const ALLOWLIST_ENTRIES: [string, string, string][] = [
   ["POST", "/api/auth/refresh", "auth refresh"],
   ["GET", "/api/playlists", "list playlists"],
   ["POST", "/api/playlists", "add playlist"],
+  ["PUT", "/api/playlists/reorder", "reorder playlists"],
   ["GET", "/api/playlists/abc123", "get playlist by id"],
   ["DELETE", "/api/playlists/abc123", "delete playlist"],
   ["POST", "/api/playback/pause", "playback command"],
@@ -103,7 +105,7 @@ describe("route alignment: Ktor ↔ relay allowlist", () => {
     function normalize(method: string, path: string): string {
       const normalized = path
         .replace(/\/playback\/[^/]+$/, "/playback/:cmd")
-        .replace(/\/playlists\/[^/]+$/, "/playlists/:id");
+        .replace(/\/playlists\/(?!reorder$)[^/]+$/, "/playlists/:id");
       return `${method} ${normalized}`;
     }
 
